@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: satyashield
+  labels:
+    name: satyashield
+    app: satyashield
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: satyashield-quota
+  namespace: satyashield
+spec:
+  hard:
+    requests.cpu: "10"
+    requests.memory: 20Gi
+    limits.cpu: "20"
+    limits.memory: 40Gi
+    persistentvolumeclaims: "10"
+    services: "20"
+    secrets: "20"
+    configmaps: "20"
