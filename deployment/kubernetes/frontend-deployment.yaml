@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: satyashield-frontend
+  namespace: satyashield
+  labels:
+    app: satyashield-frontend
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: satyashield-frontend
+  template:
+    metadata:
+      labels:
+        app: satyashield-frontend
+        version: v1
+    spec:
+      containers:
+      - name: frontend
+        image: satyashield/frontend:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NODE_ENV
+          value: "production"
+        envFrom:
+        - configMapRef:
+            name: satyashield-config
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: app-cache
+          mountPath: /app/.next/cache
+      volumes:
+      - name: app-cache
+        emptyDir: {}
+      imagePullSecrets:
+      - name: satyashield-registry-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: satyashield-frontend
+  namespace: satyashield
+  labels:
+    app: satyashield-frontend
+spec:
+  selector:
+    app: satyashield-frontend
+  ports:
+  - name: http
+    port: 3000
+    targetPort: 3000
+  type: ClusterIP
