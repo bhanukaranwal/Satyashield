@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: satyashield-backend
+  namespace: satyashield
+  labels:
+    app: satyashield-backend
+    version: v1
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: satyashield-backend
+  template:
+    metadata:
+      labels:
+        app: satyashield-backend
+        version: v1
+    spec:
+      containers:
+      - name: backend
+        image: satyashield/backend:latest
+        ports:
+        - containerPort: 5000
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: satyashield-secrets
+              key: mongodb-uri
+        - name: REDIS_URI
+          valueFrom:
+            secretKeyRef:
+              name: satyashield-secrets
+              key: redis-uri
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: satyashield-secrets
+              key: jwt-secret
+        - name: JWT_REFRESH_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: satyashield-secrets
+              key: jwt-refresh-secret
+        envFrom:
+        - configMapRef:
+            name: satyashield-config
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: upload-storage
+          mountPath: /app/uploads
+        - name: logs
+          mountPath: /app/logs
+      volumes:
+      - name: upload-storage
+        persistentVolumeClaim:
+          claimName: satyashield-uploads-pvc
+      - name: logs
+        persistentVolumeClaim:
+          claimName: satyashield-logs-pvc
+      imagePullSecrets:
+      - name: satyashield-registry-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: satyashield-backend
+  namespace: satyashield
+  labels:
+    app: satyashield-backend
+spec:
+  selector:
+    app: satyashield-backend
+  ports:
+  - name: http
+    port: 5000
+    targetPort: 5000
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: satyashield-uploads-pvc
+  namespace: satyashield
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: nfs-storage
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: satyashield-logs-pvc
+  namespace: satyashield
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: nfs-storage
