@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: satyashield-ai-engine
+  namespace: satyashield
+  labels:
+    app: satyashield-ai-engine
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: satyashield-ai-engine
+  template:
+    metadata:
+      labels:
+        app: satyashield-ai-engine
+        version: v1
+    spec:
+      containers:
+      - name: ai-engine
+        image: satyashield/ai-engine:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: PYTHONPATH
+          value: "/app"
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: satyashield-secrets
+              key: mongodb-uri
+        - name: REDIS_URI
+          valueFrom:
+            secretKeyRef:
+              name: satyashield-secrets
+              key: redis-uri
+        envFrom:
+        - configMapRef:
+            name: satyashield-config
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2000m"
+            nvidia.com/gpu: 1
+          limits:
+            memory: "8Gi"
+            cpu: "4000m"
+            nvidia.com/gpu: 1
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        volumeMounts:
+        - name: model-storage
+          mountPath: /app/data/models
+        - name: temp-storage
+          mountPath: /tmp
+      nodeSelector:
+        accelerator: nvidia-tesla-v100  # GPU nodes
+      tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+      volumes:
+      - name: model-storage
+        persistentVolumeClaim:
+          claimName: satyashield-models-pvc
+      - name: temp-storage
+        emptyDir:
+          sizeLimit: 10Gi
+      imagePullSecrets:
+      - name: satyashield-registry-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: satyashield-ai-engine
+  namespace: satyashield
+  labels:
+    app: satyashield-ai-engine
+spec:
+  selector:
+    app: satyashield-ai-engine
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: satyashield-models-pvc
+  namespace: satyashield
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 500Gi
+  storageClassName: ssd-storage
